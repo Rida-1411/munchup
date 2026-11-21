@@ -1,0 +1,70 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: ap-south-1
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt pytest
+      - run: pytest -v
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install bandit pip-audit
+      - run: bandit -r app.py -ll
+      - run: pip-audit -r requirements.txt
+
+  build:
+    needs: [test, security]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: zip -r build-${{ github.run_number }}.zip app.py requirements.txt
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      - run: |
+          aws s3 cp build-${{ github.run_number }}.zip s3://${{ secrets.S3_BUCKET }}/builds/build-${{ github.run_number }}.zip
+          aws s3 cp build-${{ github.run_number }}.zip s3://${{ secrets.S3_BUCKET }}/builds/latest.zip
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Deploy latest build from S3 to EC2
+        run: |
+          CMD_ID=$(aws ssm send-command \
+            --instance-ids ${{ secrets.EC2_INSTANCE_ID }} \
+            --document-name "AWS-RunShellScript" \
+            --parameters 'commands=["set -e","aws s3 cp s3://${{ secrets.S3_BUCKET }}/builds/latest.zip /tmp/latest.zip","unzip -o /tmp/latest.zip -d /opt/munchup","/opt/munchup/venv/bin/pip install -r /opt/munchup/requirements.txt","systemctl restart munchup"]' \
+            --query "Command.CommandId" --output text)
+          aws ssm wait command-executed --command-id $CMD_ID --instance-id ${{ secrets.EC2_INSTANCE_ID }}
+      - name: Verify production
+        run: |
+          sleep 5
+          curl -s http://${{ secrets.EC2_HOST }}/version
