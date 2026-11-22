@@ -6,7 +6,7 @@ from dash import Dash, html, dcc, Input, Output, State, ctx, dash_table
 
 app = Dash(__name__)
 app.title = "MunchUp Food Delivery"
-APP_VERSION = "3.0"
+APP_VERSION = "2.0"
 server = app.server
 
 @server.route("/version")
@@ -505,7 +505,7 @@ app.layout = html.Div([
     html.Div([
         html.H1("MunchUp", style={"margin": "0", "fontSize": "36px"}),
         html.P(
-            f"Good Food Is Just a Tap Away (v{APP_VERSION})",
+            f"Tap. Order. Munch. Repeat (v{APP_VERSION})",
             style={"marginBottom": "0"},
         ),
     ], style={
