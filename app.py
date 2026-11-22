@@ -6,7 +6,7 @@ from dash import Dash, html, dcc, Input, Output, State, ctx, dash_table
 
 app = Dash(__name__)
 app.title = "MunchUp Food Delivery"
-APP_VERSION = "1.0"
+APP_VERSION = "1.1"
 server = app.server
 
 @server.route("/version")
